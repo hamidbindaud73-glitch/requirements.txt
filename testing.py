@@ -6,6 +6,68 @@ import os
 import io
 from fpdf import FPDF
 
+# ==========================================
+# 1. FUNGSI UTILITIES (VERSI TABEL RAPI)
+# ==========================================
+
+def convert_df_to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Laporan')
+        workbook  = writer.book
+        worksheet = writer.sheets['Laporan']
+        
+        # Header Format
+        header_format = workbook.add_format({
+            'bold': True, 'text_wrap': True, 'valign': 'top',
+            'fg_color': '#D7E4BC', 'border': 1
+        })
+
+        # Auto-fit kolom
+        for i, col in enumerate(df.columns):
+            column_len = max(df[col].astype(str).str.len().max(), len(col)) + 3
+            worksheet.set_column(i, i, column_len)
+            
+    return output.getvalue()
+
+def convert_df_to_pdf(df, title):
+    # Menggunakan 'L' untuk Landscape agar tabel lebih leluasa
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    
+    pdf.cell(0, 10, title, ln=True, align='C')
+    pdf.ln(5)
+    
+    # Total lebar Landscape A4 adalah 277mm
+    num_cols = len(df.columns)
+    col_width = 277 / num_cols 
+    
+    # Header
+    pdf.set_font("Arial", 'B', 10)
+    pdf.set_fill_color(230, 230, 230)
+    for col in df.columns:
+        pdf.cell(col_width, 10, str(col), border=1, align='C', fill=True)
+    pdf.ln()
+    
+    # Isi
+    pdf.set_font("Arial", size=9)
+    for index, row in df.iterrows():
+        for col in df.columns:
+            pdf.cell(col_width, 8, str(row[col]), border=1)
+        pdf.ln()
+        
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+# ==========================================
+# 2. FUNGSI LOAD & SAVE DATA
+# ==========================================
+def load_data():
+    # ... isi fungsi load_data Anda ...
+    pass
+
+# ... dan seterusnya ke bawah (Login, Menu, dll)
+
 # --- Konfigurasi Halaman ---
 st.set_page_config(
     page_title="Sistem Manajemen Karyawan & Transaksi",
@@ -329,3 +391,4 @@ else:
                 fig_pie = px.pie(filtered_df, values='Jumlah', names='Tipe', 
                                  title="Pemasukan vs Pengeluaran", hole=0.4)
                 st.plotly_chart(fig_pie, use_container_width=True)
+
