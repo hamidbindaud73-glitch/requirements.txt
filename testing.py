@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import os
+import io
+from fpdf import FPDF
 
 # --- Konfigurasi Halaman ---
 st.set_page_config(
@@ -15,19 +17,56 @@ st.set_page_config(
 FILE_KARYAWAN = 'data_karyawan.csv'
 FILE_TRANSAKSI = 'data_transaksi.csv'
 
+# --- FUNGSI UTILITIES (Login & Download) ---
+
+def check_login(username, password):
+    """Verifikasi username dan password sederhana."""
+    return username == "admin" and password == "admin123"
+
+def convert_df_to_excel(df):
+    """Mengubah DataFrame menjadi file Excel (bytes)."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    processed_data = output.getvalue()
+    return processed_data
+
+def convert_df_to_pdf(df, title):
+    """Mengubah DataFrame menjadi file PDF sederhana."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Judul
+    pdf.cell(200, 10, txt=title, ln=True, align='C')
+    pdf.ln(10)
+    
+    # Header Tabel
+    pdf.set_font("Arial", 'B', size=10)
+    cols = df.columns
+    for col in cols:
+        pdf.cell(40, 10, str(col), border=1)
+    pdf.ln()
+    
+    # Isi Tabel
+    pdf.set_font("Arial", size=10)
+    for index, row in df.iterrows():
+        for col in cols:
+            # Konversi data ke string dan potong jika terlalu panjang agar tidak error layout
+            data_str = str(row[col])[:20] 
+            pdf.cell(40, 10, data_str, border=1)
+        pdf.ln()
+        
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
 # --- FUNGSI LOAD & SAVE DATA ---
 def load_data():
-    """Memuat data dari CSV dan menangani perubahan struktur kolom."""
-    
-    # 1. Load Data Karyawan
     if os.path.exists(FILE_KARYAWAN):
         df_karyawan = pd.read_csv(FILE_KARYAWAN)
-        # Cek apakah kolom 'Gaji' sudah ada (untuk handle data lama)
         if 'Gaji' not in df_karyawan.columns:
-            df_karyawan['Gaji'] = 0 # Isi default 0 untuk data lama
-            df_karyawan.to_csv(FILE_KARYAWAN, index=False) # Update struktur file
+            df_karyawan['Gaji'] = 0
+            df_karyawan.to_csv(FILE_KARYAWAN, index=False)
     else:
-        # Data awal dummy
         df_karyawan = pd.DataFrame({
             'Nama': ['Budi Santoso', 'Siti Aminah'],
             'Jabatan': ['Manager', 'Staff'],
@@ -36,7 +75,6 @@ def load_data():
         })
         df_karyawan.to_csv(FILE_KARYAWAN, index=False)
 
-    # 2. Load Data Transaksi
     if os.path.exists(FILE_TRANSAKSI):
         df_transaksi = pd.read_csv(FILE_TRANSAKSI)
     else:
@@ -52,152 +90,242 @@ def load_data():
     return df_karyawan, df_transaksi
 
 def save_data(df, filename):
-    """Menyimpan dataframe ke file CSV."""
     df.to_csv(filename, index=False)
 
 # --- INISIALISASI SESSION STATE ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
 if 'karyawan' not in st.session_state:
     df_k, df_t = load_data()
     st.session_state['karyawan'] = df_k
     st.session_state['transaksi'] = df_t
 
-# --- Sidebar Navigasi ---
-st.sidebar.title("Navigasi Utama")
-menu = st.sidebar.radio("Pilih Menu:", ["Dashboard & Transaksi", "Manajemen Karyawan"])
+# ==========================================
+# LOGIKA LOGIN SYSTEM
+# ==========================================
 
-# --- FUNGSI 1: MANAJEMEN KARYAWAN ---
-if menu == "Manajemen Karyawan":
-    st.title("👥 Pengelolaan Data Karyawan")
-    st.markdown("---")
-
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        st.subheader("Tambah Karyawan Baru")
-        with st.form("form_karyawan"):
-            nama = st.text_input("Nama Lengkap")
-            jabatan = st.selectbox("Jabatan", ["Manager", "Supervisor", "Staff", "Intern", "IT Support"])
-            departemen = st.text_input("Departemen")
-            # --- TAMBAHAN INPUT GAJI ---
-            gaji = st.number_input("Gaji Pokok (Rp)", min_value=0, step=100000, format="%d")
+if not st.session_state['logged_in']:
+    st.title("🔒 Login Administrator")
+    
+    col_login1, col_login2, col_login3 = st.columns([1,2,1])
+    
+    with col_login2:
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submit_login = st.form_submit_button("Login")
             
-            submit_karyawan = st.form_submit_button("Simpan Data")
+            if submit_login:
+                if check_login(username, password):
+                    st.session_state['logged_in'] = True
+                    st.rerun()
+                else:
+                    st.error("Username atau Password salah!")
+else:
+    # ==========================================
+    # APLIKASI UTAMA (SETELAH LOGIN)
+    # ==========================================
+    
+    # --- Sidebar Navigasi ---
+    st.sidebar.title("Navigasi Utama")
+    st.sidebar.info("Login sebagai: Admin")
+    
+    menu = st.sidebar.radio("Pilih Menu:", ["Dashboard & Transaksi", "Manajemen Karyawan"])
+    
+    # Tombol Logout
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Log Out"):
+        st.session_state['logged_in'] = False
+        st.rerun()
 
-            if submit_karyawan and nama and departemen:
-                new_data = pd.DataFrame({
-                    'Nama': [nama], 
-                    'Jabatan': [jabatan], 
-                    'Departemen': [departemen],
-                    'Gaji': [gaji] # Simpan Gaji
-                })
-                st.session_state['karyawan'] = pd.concat([st.session_state['karyawan'], new_data], ignore_index=True)
-                save_data(st.session_state['karyawan'], FILE_KARYAWAN)
-                st.success("Karyawan berhasil ditambahkan!")
-                st.rerun()
+    # --- FUNGSI 1: MANAJEMEN KARYAWAN ---
+    if menu == "Manajemen Karyawan":
+        st.title("👥 Pengelolaan Data Karyawan")
+        st.markdown("---")
 
-    with col2:
-        st.subheader("Daftar Karyawan")
-        
-        # Tampilkan DataFrame
-        # Kita format tampilan angka gajinya agar tidak ada koma yang aneh, tapi tetap angka
-        st.dataframe(
-            st.session_state['karyawan'], 
-            use_container_width=True,
-            column_config={
-                "Gaji": st.column_config.NumberColumn(
-                    "Gaji (Rp)",
-                    format="Rp %d" # Format tampilan mata uang
-                )
-            }
-        )
-        
-        # Fitur Hapus Karyawan
-        if not st.session_state['karyawan'].empty:
-            st.markdown("### Hapus Data")
-            col_del1, col_del2 = st.columns([3, 1])
-            with col_del1:
-                idx_to_delete = st.number_input("Index Karyawan", min_value=0, max_value=len(st.session_state['karyawan'])-1, step=1, key="del_karyawan")
-            with col_del2:
-                st.write("") 
-                st.write("") 
-                if st.button("Hapus", key="btn_del_kar"):
-                    st.session_state['karyawan'] = st.session_state['karyawan'].drop(idx_to_delete).reset_index(drop=True)
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.subheader("Tambah Karyawan Baru")
+            with st.form("form_karyawan"):
+                nama = st.text_input("Nama Lengkap")
+                jabatan = st.selectbox("Jabatan", ["Manager", "Supervisor", "Staff", "Intern", "IT Support"])
+                departemen = st.text_input("Departemen")
+                gaji = st.number_input("Gaji Pokok (Rp)", min_value=0, step=100000, format="%d")
+                
+                submit_karyawan = st.form_submit_button("Simpan Data")
+
+                if submit_karyawan and nama and departemen:
+                    new_data = pd.DataFrame({
+                        'Nama': [nama], 
+                        'Jabatan': [jabatan], 
+                        'Departemen': [departemen],
+                        'Gaji': [gaji]
+                    })
+                    st.session_state['karyawan'] = pd.concat([st.session_state['karyawan'], new_data], ignore_index=True)
                     save_data(st.session_state['karyawan'], FILE_KARYAWAN)
+                    st.success("Karyawan berhasil ditambahkan!")
                     st.rerun()
 
-# --- FUNGSI 2: DASHBOARD & TRANSAKSI ---
-elif menu == "Dashboard & Transaksi":
-    st.title("📊 Dashboard & Transaksi")
-    
-    # 1. Form Input
-    with st.expander("➕ Tambah Transaksi Baru", expanded=False):
-        with st.form("form_transaksi"):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                tgl = st.date_input("Tanggal", datetime.now())
-                ket = st.text_input("Keterangan")
-            with col_b:
-                kategori = st.selectbox("Kategori", ["Operasional", "Gaji Karyawan", "Pemasaran", "Infrastruktur", "Penjualan", "Modal"])
-                jumlah = st.number_input("Jumlah (Rp)", min_value=0, step=10000)
-                tipe = st.radio("Tipe", ["Pemasukan", "Pengeluaran"])
+        with col2:
+            st.subheader("Daftar Karyawan")
+            df_curr_karyawan = st.session_state['karyawan']
             
-            submit_transaksi = st.form_submit_button("Simpan Transaksi")
+            st.dataframe(
+                df_curr_karyawan, 
+                use_container_width=True,
+                column_config={
+                    "Gaji": st.column_config.NumberColumn("Gaji (Rp)", format="Rp %d")
+                }
+            )
             
-            if submit_transaksi:
-                new_trans = pd.DataFrame({
-                    'Tanggal': [tgl], 'Keterangan': [ket], 'Kategori': [kategori], 
-                    'Jumlah': [jumlah], 'Tipe': [tipe]
-                })
-                st.session_state['transaksi'] = pd.concat([st.session_state['transaksi'], new_trans], ignore_index=True)
-                save_data(st.session_state['transaksi'], FILE_TRANSAKSI)
-                st.success("Transaksi berhasil disimpan!")
-                st.rerun()
+            # --- FITUR DOWNLOAD DATA KARYAWAN ---
+            st.markdown("##### 📥 Unduh Data Karyawan")
+            col_d1, col_d2 = st.columns(2)
+            
+            with col_d1:
+                # Download Excel
+                excel_data = convert_df_to_excel(df_curr_karyawan)
+                st.download_button(
+                    label="Download Excel",
+                    data=excel_data,
+                    file_name='data_karyawan.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    key='dl_excel_karyawan'
+                )
+            
+            with col_d2:
+                # Download PDF
+                try:
+                    pdf_data = convert_df_to_pdf(df_curr_karyawan, "Laporan Data Karyawan")
+                    st.download_button(
+                        label="Download PDF",
+                        data=pdf_data,
+                        file_name='data_karyawan.pdf',
+                        mime='application/pdf',
+                        key='dl_pdf_karyawan'
+                    )
+                except Exception as e:
+                    st.error(f"Gagal generate PDF: {e}")
 
-    st.markdown("---")
+            # Fitur Hapus Karyawan
+            if not df_curr_karyawan.empty:
+                st.markdown("---")
+                st.markdown("### Hapus Data")
+                col_del1, col_del2 = st.columns([3, 1])
+                with col_del1:
+                    idx_to_delete = st.number_input("Index Karyawan", min_value=0, max_value=len(df_curr_karyawan)-1, step=1, key="del_karyawan")
+                with col_del2:
+                    st.write("") 
+                    st.write("") 
+                    if st.button("Hapus", key="btn_del_kar"):
+                        st.session_state['karyawan'] = df_curr_karyawan.drop(idx_to_delete).reset_index(drop=True)
+                        save_data(st.session_state['karyawan'], FILE_KARYAWAN)
+                        st.rerun()
 
-    # 2. Pencarian & Tabel
-    st.subheader("Data Transaksi")
-    col_search, col_action = st.columns([3, 2])
-    with col_search:
-        search_term = st.text_input("🔍 Cari transaksi...")
-    
-    df_trans = st.session_state['transaksi']
-    
-    if search_term:
-        filtered_df = df_trans[df_trans['Keterangan'].astype(str).str.contains(search_term, case=False)]
-    else:
-        filtered_df = df_trans
-
-    st.dataframe(filtered_df, use_container_width=True)
-
-    # Hapus Transaksi
-    if not st.session_state['transaksi'].empty:
-        with st.expander("🗑️ Hapus Transaksi"):
-            st.warning("Hapus data berdasarkan INDEX.")
-            col_del_t1, col_del_t2 = st.columns([3, 1])
-            with col_del_t1:
-                max_idx = len(st.session_state['transaksi']) - 1
-                idx_trans_del = st.number_input(f"Index (0 - {max_idx})", min_value=0, max_value=max_idx, step=1, key="input_del_trans")
-            with col_del_t2:
-                st.write("") 
-                st.write("") 
-                if st.button("Hapus Data", key="btn_del_trans"):
-                    st.session_state['transaksi'] = st.session_state['transaksi'].drop(idx_trans_del).reset_index(drop=True)
+    # --- FUNGSI 2: DASHBOARD & TRANSAKSI ---
+    elif menu == "Dashboard & Transaksi":
+        st.title("📊 Dashboard & Transaksi")
+        
+        # 1. Form Input
+        with st.expander("➕ Tambah Transaksi Baru", expanded=False):
+            with st.form("form_transaksi"):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    tgl = st.date_input("Tanggal", datetime.now())
+                    ket = st.text_input("Keterangan")
+                with col_b:
+                    kategori = st.selectbox("Kategori", ["Operasional", "Gaji Karyawan", "Pemasaran", "Infrastruktur", "Penjualan", "Modal"])
+                    jumlah = st.number_input("Jumlah (Rp)", min_value=0, step=10000)
+                    tipe = st.radio("Tipe", ["Pemasukan", "Pengeluaran"])
+                
+                submit_transaksi = st.form_submit_button("Simpan Transaksi")
+                
+                if submit_transaksi:
+                    new_trans = pd.DataFrame({
+                        'Tanggal': [tgl], 'Keterangan': [ket], 'Kategori': [kategori], 
+                        'Jumlah': [jumlah], 'Tipe': [tipe]
+                    })
+                    st.session_state['transaksi'] = pd.concat([st.session_state['transaksi'], new_trans], ignore_index=True)
                     save_data(st.session_state['transaksi'], FILE_TRANSAKSI)
-                    st.success("Terhapus!")
+                    st.success("Transaksi berhasil disimpan!")
                     st.rerun()
 
-    st.markdown("---")
+        st.markdown("---")
 
-    # 3. Grafik
-    st.subheader("Analisis Grafik")
-    if not filtered_df.empty:
-        col_chart1, col_chart2 = st.columns(2)
-        with col_chart1:
-            fig_bar = px.bar(filtered_df, x='Kategori', y='Jumlah', color='Tipe', 
-                             title="Transaksi per Kategori", barmode='group')
-            st.plotly_chart(fig_bar, use_container_width=True)
-        with col_chart2:
-            fig_pie = px.pie(filtered_df, values='Jumlah', names='Tipe', 
-                             title="Pemasukan vs Pengeluaran", hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
+        # 2. Pencarian & Tabel
+        st.subheader("Data Transaksi")
+        col_search, col_action = st.columns([3, 2])
+        with col_search:
+            search_term = st.text_input("🔍 Cari transaksi...")
+        
+        df_trans = st.session_state['transaksi']
+        
+        if search_term:
+            filtered_df = df_trans[df_trans['Keterangan'].astype(str).str.contains(search_term, case=False)]
+        else:
+            filtered_df = df_trans
+
+        st.dataframe(filtered_df, use_container_width=True)
+
+        # --- FITUR DOWNLOAD DATA TRANSAKSI ---
+        if not filtered_df.empty:
+            st.markdown("##### 📥 Unduh Laporan Transaksi")
+            col_dt1, col_dt2 = st.columns(2)
+            
+            with col_dt1:
+                excel_trans = convert_df_to_excel(filtered_df)
+                st.download_button(
+                    label="Download Excel",
+                    data=excel_trans,
+                    file_name='laporan_transaksi.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    key='dl_excel_trans'
+                )
+            
+            with col_dt2:
+                try:
+                    pdf_trans = convert_df_to_pdf(filtered_df, "Laporan Keuangan & Transaksi")
+                    st.download_button(
+                        label="Download PDF",
+                        data=pdf_trans,
+                        file_name='laporan_transaksi.pdf',
+                        mime='application/pdf',
+                        key='dl_pdf_trans'
+                    )
+                except Exception as e:
+                    st.error(f"Gagal generate PDF: {e}")
+
+        # Hapus Transaksi
+        if not st.session_state['transaksi'].empty:
+            st.markdown("---")
+            with st.expander("🗑️ Hapus Transaksi"):
+                st.warning("Hapus data berdasarkan INDEX.")
+                col_del_t1, col_del_t2 = st.columns([3, 1])
+                with col_del_t1:
+                    max_idx = len(st.session_state['transaksi']) - 1
+                    idx_trans_del = st.number_input(f"Index (0 - {max_idx})", min_value=0, max_value=max_idx, step=1, key="input_del_trans")
+                with col_del_t2:
+                    st.write("") 
+                    st.write("") 
+                    if st.button("Hapus Data", key="btn_del_trans"):
+                        st.session_state['transaksi'] = st.session_state['transaksi'].drop(idx_trans_del).reset_index(drop=True)
+                        save_data(st.session_state['transaksi'], FILE_TRANSAKSI)
+                        st.success("Terhapus!")
+                        st.rerun()
+
+        st.markdown("---")
+
+        # 3. Grafik
+        st.subheader("Analisis Grafik")
+        if not filtered_df.empty:
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                fig_bar = px.bar(filtered_df, x='Kategori', y='Jumlah', color='Tipe', 
+                                 title="Transaksi per Kategori", barmode='group')
+                st.plotly_chart(fig_bar, use_container_width=True)
+            with col_chart2:
+                fig_pie = px.pie(filtered_df, values='Jumlah', names='Tipe', 
+                                 title="Pemasukan vs Pengeluaran", hole=0.4)
+                st.plotly_chart(fig_pie, use_container_width=True)
