@@ -44,6 +44,55 @@ def convert_df_to_pdf(df, title):
         pdf.ln() # Pindah ke baris baru setelah semua kolom satu baris selesai
         
     return pdf.output(dest='S').encode('latin-1', 'replace')
+
+def convert_df_to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # Tulis data ke sheet
+        df.to_excel(writer, index=False, sheet_name='Laporan')
+        
+        workbook  = writer.book
+        worksheet = writer.sheets['Laporan']
+        
+        # 1. Definisi Format (Garis dan Font)
+        border_format = workbook.add_format({
+            'border': 1,       # Menambahkan garis di semua sisi sel
+            'align': 'left',   # Rata kiri
+            'valign': 'vcenter'
+        })
+        
+        header_format = workbook.add_format({
+            'bold': True,
+            'bg_color': '#4F81BD', # Warna biru profesional
+            'font_color': 'white',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+
+        # 2. Terapkan Header secara manual agar lebih rapi
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+
+        # 3. Terapkan Border dan Auto-fit kolom
+        for i, col in enumerate(df.columns):
+            # Cari teks terpanjang di kolom tersebut
+            max_len = max(
+                df[col].astype(str).map(len).max(), # Panjang data
+                len(str(col))                      # Panjang header
+            ) + 3
+            
+            # Terapkan lebar kolom dan format border ke seluruh kolom
+            worksheet.set_column(i, i, max_len, border_format)
+            
+        # 4. Opsional: Buat jadi "Table" sungguhan di Excel (fitur filter otomatis)
+        (max_row, max_col) = df.shape
+        worksheet.add_table(0, 0, max_row, max_col - 1, {
+            'columns': [{'header': column} for column in df.columns],
+            'style': 'Table Style Medium 9' # Tema Excel otomatis
+        })
+            
+    return output.getvalue()
     
 # --- Konfigurasi Halaman ---
 st.set_page_config(
@@ -368,5 +417,6 @@ else:
                 fig_pie = px.pie(filtered_df, values='Jumlah', names='Tipe', 
                                  title="Pemasukan vs Pengeluaran", hole=0.4)
                 st.plotly_chart(fig_pie, use_container_width=True)
+
 
 
