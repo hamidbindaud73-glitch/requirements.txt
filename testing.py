@@ -93,7 +93,7 @@ def convert_df_to_excel(df):
         })
             
     return output.getvalue()
-    
+
 # --- Konfigurasi Halaman ---
 st.set_page_config(
     page_title="Sistem Manajemen Karyawan & Transaksi",
@@ -417,6 +417,3 @@ else:
                 fig_pie = px.pie(filtered_df, values='Jumlah', names='Tipe', 
                                  title="Pemasukan vs Pengeluaran", hole=0.4)
                 st.plotly_chart(fig_pie, use_container_width=True)
-
-
-
