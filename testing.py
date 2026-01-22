@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime       
 import os
 import io
 from fpdf import FPDF
@@ -17,7 +17,6 @@ def convert_df_to_pdf(df, title):
     pdf.ln(5)
     
     # Pengaturan Lebar Kolom (Total lebar Landscape A4 sekitar 275mm)
-    # Kita bagi rata lebar kolomnya
     num_cols = len(df.columns)
     col_width = 275 / num_cols 
     
@@ -259,9 +258,11 @@ else:
         with col2:
             st.subheader("Daftar Karyawan")
             df_curr_karyawan = st.session_state['karyawan']
+            df_curr_karyawan_display = df_curr_karyawan.copy()
+            df_curr_karyawan_display.insert(0, "No", range(1, len(df_curr_karyawan_display) + 1))
             
             st.dataframe(
-                df_curr_karyawan, 
+                df_curr_karyawan_display, 
                 use_container_width=True,
                 column_config={
                     "Gaji": st.column_config.NumberColumn("Gaji (Rp)", format="Rp %d")
@@ -303,12 +304,13 @@ else:
                 st.markdown("### Hapus Data")
                 col_del1, col_del2 = st.columns([3, 1])
                 with col_del1:
-                    idx_to_delete = st.number_input("Index Karyawan", min_value=0, max_value=len(df_curr_karyawan)-1, step=1, key="del_karyawan")
+                    idx_to_delete = st.number_input("Nomor Urut Karyawan", min_value=1, max_value=len(df_curr_karyawan), step=1, key="del_karyawan")
                 with col_del2:
                     st.write("") 
                     st.write("") 
                     if st.button("Hapus", key="btn_del_kar"):
-                        st.session_state['karyawan'] = df_curr_karyawan.drop(idx_to_delete).reset_index(drop=True)
+                        # Kurangi 1 karena index DataFrame mulai dari 0
+                        st.session_state['karyawan'] = df_curr_karyawan.drop(idx_to_delete - 1).reset_index(drop=True)
                         save_data(st.session_state['karyawan'], FILE_KARYAWAN)
                         st.rerun()
 
@@ -354,8 +356,10 @@ else:
             filtered_df = df_trans[df_trans['Keterangan'].astype(str).str.contains(search_term, case=False)]
         else:
             filtered_df = df_trans
+            filtered_df_display = filtered_df.copy()
+        filtered_df_display.insert(0, "No", range(1, len(filtered_df_display) + 1))
 
-        st.dataframe(filtered_df, use_container_width=True)
+        st.dataframe(filtered_df_display, use_container_width=True)
 
         # --- FITUR DOWNLOAD DATA TRANSAKSI ---
         if not filtered_df.empty:
@@ -389,16 +393,17 @@ else:
         if not st.session_state['transaksi'].empty:
             st.markdown("---")
             with st.expander("🗑️ Hapus Transaksi"):
-                st.warning("Hapus data berdasarkan INDEX.")
+                st.warning("Hapus data berdasarkan NOMOR URUT.")
                 col_del_t1, col_del_t2 = st.columns([3, 1])
                 with col_del_t1:
-                    max_idx = len(st.session_state['transaksi']) - 1
-                    idx_trans_del = st.number_input(f"Index (0 - {max_idx})", min_value=0, max_value=max_idx, step=1, key="input_del_trans")
+                    max_no = len(st.session_state['transaksi'])
+                    idx_trans_del = st.number_input(f"Nomor Urut (1 - {max_no})", min_value=1, max_value=max_no, step=1, key="input_del_trans")
                 with col_del_t2:
                     st.write("") 
                     st.write("") 
                     if st.button("Hapus Data", key="btn_del_trans"):
-                        st.session_state['transaksi'] = st.session_state['transaksi'].drop(idx_trans_del).reset_index(drop=True)
+                        # Kurangi 1 karena index DataFrame mulai dari 0
+                        st.session_state['transaksi'] = st.session_state['transaksi'].drop(idx_trans_del - 1).reset_index(drop=True)
                         save_data(st.session_state['transaksi'], FILE_TRANSAKSI)
                         st.success("Terhapus!")
                         st.rerun()
