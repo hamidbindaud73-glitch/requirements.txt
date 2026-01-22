@@ -7,105 +7,80 @@ import io
 from fpdf import FPDF
 
 def convert_df_to_pdf(df, title):
-    # Gunakan orientasi Landscape ('L') agar lebih luas
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    
-    # Judul Utama
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, title, ln=True, align='C')
     pdf.ln(5)
-    
-    # Pengaturan Lebar Kolom (Total lebar Landscape A4 sekitar 275mm)
     num_cols = len(df.columns)
     col_width = 275 / num_cols 
-    
-    # --- BAGIAN HEADER TABEL ---
     pdf.set_font("Arial", 'B', 10)
-    pdf.set_fill_color(200, 220, 255) # Warna biru muda untuk header
+    pdf.set_fill_color(200, 220, 255) 
+   
     for col in df.columns:
-        # border=1 adalah kunci munculnya garis
         pdf.cell(col_width, 10, str(col), border=1, align='C', fill=True)
     pdf.ln()
     
-    # --- BAGIAN ISI TABEL ---
     pdf.set_font("Arial", size=9)
-    # Reset warna backgroud ke putih untuk isi
     pdf.set_fill_color(255, 255, 255)
     
     for index, row in df.iterrows():
-        # Hitung tinggi baris (bisa disesuaikan)
         row_height = 8
         for col in df.columns:
             data_str = str(row[col])
-            # border=1 harus ada di sini untuk setiap sel
             pdf.cell(col_width, row_height, data_str, border=1)
-        pdf.ln() # Pindah ke baris baru setelah semua kolom satu baris selesai
+        pdf.ln() 
         
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 def convert_df_to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Tulis data ke sheet
         df.to_excel(writer, index=False, sheet_name='Laporan')
-        
         workbook  = writer.book
         worksheet = writer.sheets['Laporan']
-        
-        # 1. Definisi Format (Garis dan Font)
         border_format = workbook.add_format({
-            'border': 1,       # Menambahkan garis di semua sisi sel
-            'align': 'left',   # Rata kiri
+            'border': 1,       
+            'align': 'left',   
             'valign': 'vcenter'
         })
         
         header_format = workbook.add_format({
             'bold': True,
-            'bg_color': '#4F81BD', # Warna biru profesional
+            'bg_color': '#4F81BD', 
             'font_color': 'white',
             'border': 1,
             'align': 'center',
             'valign': 'vcenter'
         })
 
-        # 2. Terapkan Header secara manual agar lebih rapi
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_format)
 
-        # 3. Terapkan Border dan Auto-fit kolom
         for i, col in enumerate(df.columns):
-            # Cari teks terpanjang di kolom tersebut
             max_len = max(
-                df[col].astype(str).map(len).max(), # Panjang data
-                len(str(col))                      # Panjang header
+                df[col].astype(str).map(len).max(), 
+                len(str(col))                      
             ) + 3
             
-            # Terapkan lebar kolom dan format border ke seluruh kolom
             worksheet.set_column(i, i, max_len, border_format)
             
-        # 4. Opsional: Buat jadi "Table" sungguhan di Excel (fitur filter otomatis)
         (max_row, max_col) = df.shape
         worksheet.add_table(0, 0, max_row, max_col - 1, {
             'columns': [{'header': column} for column in df.columns],
-            'style': 'Table Style Medium 9' # Tema Excel otomatis
+            'style': 'Table Style Medium 9' 
         })
             
     return output.getvalue()
 
-# --- Konfigurasi Halaman ---
 st.set_page_config(
     page_title="Sistem Manajemen Karyawan & Transaksi",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# --- KONFIGURASI FILE PENYIMPANAN ---
 FILE_KARYAWAN = 'data_karyawan.csv'
 FILE_TRANSAKSI = 'data_transaksi.csv'
-
-# --- FUNGSI UTILITIES (Login & Download) ---
-
+# ==========================================
 def check_login(username, password):
     """Verifikasi username dan password sederhana."""
     return username == "admin" and password == "admin123"
@@ -119,34 +94,26 @@ def convert_df_to_excel(df):
     return processed_data
 
 def convert_df_to_pdf(df, title):
-    """Mengubah DataFrame menjadi file PDF sederhana."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    
-    # Judul
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
-    
-    # Header Tabel
     pdf.set_font("Arial", 'B', size=10)
     cols = df.columns
     for col in cols:
         pdf.cell(40, 10, str(col), border=1)
     pdf.ln()
-    
-    # Isi Tabel
     pdf.set_font("Arial", size=10)
+    
     for index, row in df.iterrows():
         for col in cols:
-            # Konversi data ke string dan potong jika terlalu panjang agar tidak error layout
             data_str = str(row[col])[:20] 
             pdf.cell(40, 10, data_str, border=1)
         pdf.ln()
         
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- FUNGSI LOAD & SAVE DATA ---
 def load_data():
     if os.path.exists(FILE_KARYAWAN):
         df_karyawan = pd.read_csv(FILE_KARYAWAN)
@@ -178,8 +145,7 @@ def load_data():
 
 def save_data(df, filename):
     df.to_csv(filename, index=False)
-
-# --- INISIALISASI SESSION STATE ---
+# ==========================================
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -187,10 +153,6 @@ if 'karyawan' not in st.session_state:
     df_k, df_t = load_data()
     st.session_state['karyawan'] = df_k
     st.session_state['transaksi'] = df_t
-
-# ==========================================
-# LOGIKA LOGIN SYSTEM
-# ==========================================
 
 if not st.session_state['logged_in']:
     st.title("🔒 Login Administrator")
@@ -210,23 +172,17 @@ if not st.session_state['logged_in']:
                 else:
                     st.error("Username atau Password salah!")
 else:
-    # ==========================================
-    # APLIKASI UTAMA (SETELAH LOGIN)
-    # ==========================================
-    
-    # --- Sidebar Navigasi ---
+
     st.sidebar.title("Navigasi Utama")
     st.sidebar.info("Login sebagai: Admin")
     
     menu = st.sidebar.radio("Pilih Menu:", ["Dashboard & Transaksi", "Manajemen Karyawan"])
     
-    # Tombol Logout
     st.sidebar.markdown("---")
     if st.sidebar.button("Log Out"):
         st.session_state['logged_in'] = False
         st.rerun()
 
-    # --- FUNGSI 1: MANAJEMEN KARYAWAN ---
     if menu == "Manajemen Karyawan":
         st.title("👥 Pengelolaan Data Karyawan")
         st.markdown("---")
@@ -269,12 +225,10 @@ else:
                 }
             )
             
-            # --- FITUR DOWNLOAD DATA KARYAWAN ---
             st.markdown("##### 📥 Unduh Data Karyawan")
             col_d1, col_d2 = st.columns(2)
             
             with col_d1:
-                # Download Excel
                 excel_data = convert_df_to_excel(df_curr_karyawan)
                 st.download_button(
                     label="Download Excel",
@@ -285,7 +239,6 @@ else:
                 )
             
             with col_d2:
-                # Download PDF
                 try:
                     pdf_data = convert_df_to_pdf(df_curr_karyawan, "Laporan Data Karyawan")
                     st.download_button(
@@ -298,7 +251,6 @@ else:
                 except Exception as e:
                     st.error(f"Gagal generate PDF: {e}")
 
-            # Fitur Hapus Karyawan
             if not df_curr_karyawan.empty:
                 st.markdown("---")
                 st.markdown("### Hapus Data")
@@ -309,16 +261,13 @@ else:
                     st.write("") 
                     st.write("") 
                     if st.button("Hapus", key="btn_del_kar"):
-                        # Kurangi 1 karena index DataFrame mulai dari 0
                         st.session_state['karyawan'] = df_curr_karyawan.drop(idx_to_delete - 1).reset_index(drop=True)
                         save_data(st.session_state['karyawan'], FILE_KARYAWAN)
                         st.rerun()
 
-    # --- FUNGSI 2: DASHBOARD & TRANSAKSI ---
     elif menu == "Dashboard & Transaksi":
         st.title("📊 Dashboard & Transaksi")
         
-        # 1. Form Input
         with st.expander("➕ Tambah Transaksi Baru", expanded=False):
             with st.form("form_transaksi"):
                 col_a, col_b = st.columns(2)
@@ -344,7 +293,6 @@ else:
 
         st.markdown("---")
 
-        # 2. Pencarian & Tabel
         st.subheader("Data Transaksi")
         col_search, col_action = st.columns([3, 2])
         with col_search:
@@ -361,7 +309,6 @@ else:
 
         st.dataframe(filtered_df_display, use_container_width=True)
 
-        # --- FITUR DOWNLOAD DATA TRANSAKSI ---
         if not filtered_df.empty:
             st.markdown("##### 📥 Unduh Laporan Transaksi")
             col_dt1, col_dt2 = st.columns(2)
@@ -389,7 +336,6 @@ else:
                 except Exception as e:
                     st.error(f"Gagal generate PDF: {e}")
 
-        # Hapus Transaksi
         if not st.session_state['transaksi'].empty:
             st.markdown("---")
             with st.expander("🗑️ Hapus Transaksi"):
@@ -402,7 +348,6 @@ else:
                     st.write("") 
                     st.write("") 
                     if st.button("Hapus Data", key="btn_del_trans"):
-                        # Kurangi 1 karena index DataFrame mulai dari 0
                         st.session_state['transaksi'] = st.session_state['transaksi'].drop(idx_trans_del - 1).reset_index(drop=True)
                         save_data(st.session_state['transaksi'], FILE_TRANSAKSI)
                         st.success("Terhapus!")
@@ -410,7 +355,6 @@ else:
 
         st.markdown("---")
 
-        # 3. Grafik
         st.subheader("Analisis Grafik")
         if not filtered_df.empty:
             col_chart1, col_chart2 = st.columns(2)
